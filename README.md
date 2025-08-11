@@ -35,7 +35,7 @@ Below we detail the model informations that can be controlled in the file `confi
     },
     "model_params": {
         "convex": false, // convex case not covered in the paper, but still available
-        "groupsize": 4, // input dimension of the potentials, corresponds to d in the paper
+        "groupsize": 4, // input dimension of the potentials, d in the paper
         "lamb_init": 5.0, // log of the lambda parameter
         "scaling": 0.01 // control the magnitude of the mu function
     },

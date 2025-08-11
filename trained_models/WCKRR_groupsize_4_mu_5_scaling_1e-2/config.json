@@ -1,0 +1,59 @@
+{
+    "exp_name": "MFoE_groupsize_4",
+    "logging_info": {
+        "log_batch": 5000,
+        "log_dir": "trained_models/"
+    },
+    "model_params": {
+        "convex": false,
+        "groupsize": 4,
+        "lamb_init": 5.0,
+        "scaling": 0.01
+    },
+    "multi_convolution": {
+        "num_channels": [
+            1,
+            4,
+            8,
+            60
+        ],
+        "size_kernels": [
+            3,
+            5,
+            5
+        ]
+    },
+    "noise_range": [
+        0,
+        0.2
+    ],
+    "noise_val": [
+        5,
+        15,
+        25,
+        50
+    ],
+    "optimization": {
+        "fixed_point_solver_bw_params": {
+            "max_iter": 25,
+            "tol": 0.001
+        },
+        "fixed_point_solver_fw_params": {
+            "max_iter": 300,
+            "tol": 0.0001
+        }
+    },
+    "train_dataloader": {
+        "batch_size": 128,
+        "train_data_file": "/path/to/train",
+        "val_data_file": "/path/to/val"
+    },
+    "training_options": {
+        "lr_activation": 0.05,
+        "lr_conv": 0.005,
+        "lr_decay": 0.75,
+        "lr_mu": 0.005,
+        "n_batch_decay": 500,
+        "n_batches": 5000
+    }
+}

@@ -11,7 +11,7 @@ torch.manual_seed(0)
 
 sys.path.append('../..')
 from models.mfoe import MFoE
-from models.optimization import SAGD
+from models.optimization import AGDR
 from inverse_problems.tune_hyperparameters import tune_hyperparameters
 
 
@@ -48,7 +48,7 @@ def test_hyperparameter(lamb, sigma):
         model.lamb.data = model.lamb + math.log(lamb)
         if testing:
             starter.record()
-        pred = SAGD(fbp_op(y), y, model, sigma * torch.ones(1,
+        pred = AGDR(fbp_op(y), y, model, sigma * torch.ones(1,
                     1, 1, 1, device=device), max_iter, tol)[0]
         if testing:
             ender.record()

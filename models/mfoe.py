@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.optimization import SAGD, proj_l1_channel
+from models.optimization import AGDR, proj_l1_channel
 from models.multi_conv import MultiConv2d
 import torch.nn.functional as F
 if torch.is_grad_enabled():
@@ -62,7 +62,7 @@ class MFoE(nn.Module):
             return x - self.reconstruct(x, x_noisy, sigma=sigma)[0]
 
         def f_solver(deq_func, x0, max_iter, tol, stop_mode, **solver_kwargs):
-            z, self.fw_niter_max, self.fw_niter_mean = SAGD(
+            z, self.fw_niter_max, self.fw_niter_mean = AGDR(
                 x0.view(x_noisy.shape), self, sigma, **self.param_fw)
             return z.view(x0.shape), [], []
 

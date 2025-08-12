@@ -1,7 +1,7 @@
 import torch
 
 
-def SAGD(x_noisy, model, sigma, max_iter=300, tol=1e-4):
+def AGDR(x_noisy, model, sigma, max_iter=300, tol=1e-4):
     """Optimization using the FISTA accelerated rule"""
 
     # initial value: noisy image

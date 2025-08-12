@@ -11,6 +11,11 @@ The required packages:
 - `pytorch`
 - `torchdeq`
 - `matplotlib`
+- `fastmri` (to generate the MRI masks)
+- `astra-toolbox` (for CT reconstruction)
+- `odl` (for CT reconstruction)
+
+The envs folder contains two files; `ct_reconstruction.yml` describes the environment used for the CT reconstruction, `training.yml` describes the envionment used for everything else.
 
 #### Training
 

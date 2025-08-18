@@ -1,11 +1,11 @@
 import torch
 
 
-def AGDR(x_noisy, model, sigma, max_iter=300, tol=1e-4):
+def AGDR(x_init, y, model, sigma, max_iter=300, tol=1e-4):
     """Optimization using the FISTA accelerated rule"""
 
     # initial value: noisy image
-    x = torch.clone(x_noisy)
+    x = torch.clone(x_init)
     z = x.clone()
     t = torch.ones(x.shape[0], device=x.device).view(-1, 1, 1, 1)
 
@@ -23,7 +23,7 @@ def AGDR(x_noisy, model, sigma, max_iter=300, tol=1e-4):
     for i in range(max_iter):
         model.scaling = scaling[idx]
         x_old = torch.clone(x)
-        grad, cost = model.reconstruct(z[idx], x_noisy[idx], sigma=sigma[idx])
+        grad, cost = model.reconstruct(z[idx], y[idx], sigma=sigma[idx])
         x[idx] = z[idx] - grad
 
         t_old = torch.clone(t)

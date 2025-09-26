@@ -45,8 +45,8 @@
     },
     "train_dataloader": {
         "batch_size": 128,
-        "train_data_file": "/home/ducotter/nerf_dip/images/train.h5",
-        "val_data_file": "/home/ducotter/nerf_dip/images/test.h5"
+        "train_data_file": "path/to/train",
+        "val_data_file": "path/to/val"
     },
     "training_options": {
         "lr_activation": 0.05,

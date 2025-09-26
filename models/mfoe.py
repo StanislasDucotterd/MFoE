@@ -63,7 +63,7 @@ class MFoE(nn.Module):
 
         def f_solver(deq_func, x0, max_iter, tol, stop_mode, **solver_kwargs):
             z, self.fw_niter_max, self.fw_niter_mean = AGDR(
-                x0.view(x_noisy.shape), self, sigma, **self.param_fw)
+                x0.view(x_noisy.shape), x0.view(x_noisy.shape), self, sigma, **self.param_fw)
             return z.view(x0.shape), [], []
 
         deq = get_deq(f_max_iter=self.param_fw['max_iter'], f_tol=self.param_fw['tol'], b_solver='broyden',

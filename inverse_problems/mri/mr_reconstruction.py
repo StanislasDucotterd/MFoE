@@ -10,7 +10,7 @@ torch.manual_seed(0)
 
 sys.path.append('../..')
 from models.mfoe import MFoE
-from models.optimization import AGDR
+from models.optimization import HBR
 from inverse_problems.tune_hyperparameters import tune_hyperparameters
 
 
@@ -34,23 +34,26 @@ def test_hyperparameter(lamb, sigma):
         x_gt = torch.load(os.path.join(data_folder, image,
                           'x_crop.pt'), weights_only=True).to(device)
         y = torch.load(os.path.join(data_folder, image, 'y.pt'),
-                       weights_only=True).to(device)
-        Hty = torch.fft.ifft2(y*mask, norm='ortho').real
-
-        def reconstruct(self, x, y, sigma):
+                       weights_only=True).to(device) * mask
+        Hty = torch.fft.ifft2(y * mask, norm='ortho').real
+        
+        def reconstruct(self, x, y, Hty, sigma):
+            Hx = torch.fft.fft2(x, norm='ortho')*mask
             grad, cost = self.grad_cost(x, sigma)
-            grad = 1. / (1. + self.lamb.exp()) * (torch.fft.ifft2(torch.fft.fft2(x,
-                                                                                 norm='ortho')*mask, norm='ortho').real - Hty + grad)
-            cost = cost + (1/2)*((torch.fft.fft2(x, norm='ortho') - y)
-                                 * mask).norm(dim=(1, 2, 3), p=2)**2
+            grad = torch.fft.ifft2(Hx, norm='ortho').real - Hty + grad
+            cost = cost + (1/2)*(Hx - y).norm(dim=(1, 2, 3), p=2)**2
             return grad, cost
+            
         model.reconstruct = types.MethodType(reconstruct, model)
 
         model.lamb.data = model.lamb + math.log(lamb)
+        lip = 1. + model.lamb.exp()
         if testing:
             starter.record()
-        pred = AGDR(Hty, y, model, sigma * torch.ones(1, 1,
+
+        pred = HBR(Hty, y, Hty, lip, model, sigma * torch.ones(1, 1,
                     1, 1, device=device), max_iter, tol)[0]
+        
         if testing:
             ender.record()
             torch.cuda.synchronize()
@@ -72,7 +75,7 @@ parser.add_argument('-d', '--device', default="cpu",
 device = parser.parse_args().device
 psnr = PSNR(data_range=1.).to(device)
 
-data_type = 'singlecoil_acc_4_cf_0.08_noisesd_0.01/pdfs/'
+data_type = 'singlecoil_acc_4_cf_0.08_noisesd_0.01/pd/'
 
 model_name = 'MFoE_groupsize_4'
 infos = torch.load('../../trained_models/' + model_name +

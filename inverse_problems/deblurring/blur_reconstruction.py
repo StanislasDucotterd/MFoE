@@ -10,7 +10,7 @@ torch.manual_seed(0)
 
 sys.path.append('../..')
 from models.mfoe import MFoE
-from models.optimization import AGDR
+from models.optimization import HBR
 from inverse_problems.tune_hyperparameters import tune_hyperparameters
 
 
@@ -25,18 +25,21 @@ def test_hyperparameter(lamb, sigma):
                           'img.pth'), weights_only=True).to(device)
         y = torch.load(os.path.join(
             data_folder, image, f'y{kernel_id}_{noise_type}_noise.pth'), weights_only=True).to(device)
+        Hty = Ht(y)
 
-        def reconstruct(self, x, y, sigma):
+        def reconstruct(self, x, y, Hty, sigma):
+            Hx = H(x)
             grad, cost = self.grad_cost(x, sigma)
-            grad = 1. / (1.0 + self.lamb.exp()) * (Ht(H(x)) - Ht(y) + grad)
-            cost = cost + (1/2)*(H(x) - y).norm(dim=(1, 2, 3), p=2)**2
+            grad = Ht(Hx) - Hty + grad
+            cost = cost + (1/2)*(Hx - y).norm(dim=(1, 2, 3), p=2)**2
             return grad, cost
         model.reconstruct = types.MethodType(reconstruct, model)
 
         model.lamb.data = model.lamb + math.log(lamb)
+        lip = 1. + model.lamb.exp()
         if testing:
             starter.record()
-        pred = AGDR(y, y, model, sigma * torch.ones(1, 1,
+        pred = HBR(y, y, Hty, lip, model, sigma * torch.ones(1, 1,
                     1, 1, device=device), max_iter, tol)[0]
         if testing:
             ender.record()
@@ -70,10 +73,6 @@ Ht = torch.nn.Conv2d(1, 1, kernel_size=25, padding=12,
                      bias=False, padding_mode='circular')
 Ht.weight.data = kernel.flip(2, 3)
 H, Ht = H.to(device), Ht.to(device)
-
-testing = False
-data_folder = 'val_data/'
-images = os.listdir(data_folder)
 
 model_name = 'MFoE_groupsize_4'
 infos = torch.load('../../trained_models/' + model_name +

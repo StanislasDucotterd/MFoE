@@ -11,7 +11,7 @@ torch.manual_seed(0)
 
 sys.path.append('../..')
 from models.mfoe import MFoE
-from models.optimization import AGDR
+from models.optimization import HBR
 from inverse_problems.tune_hyperparameters import tune_hyperparameters
 
 
@@ -26,6 +26,7 @@ def test_hyperparameter(lamb, sigma):
                           'image.pth'), weights_only=True).to(device)
         y = torch.load(os.path.join(
             data_folder, image, f'y_{num_angles}_{det_shape}.pth'), weights_only=True).to(device)
+        Hty = bp_op(y)
 
         # Power iterations to compute the lipschitz constant
         if n == 0:
@@ -37,18 +38,19 @@ def test_hyperparameter(lamb, sigma):
             x = bp_op(fwd_op(x))
             data_lip = x.norm()
 
-        def reconstruct(self, x, y, sigma):
+        def reconstruct(self, x, y, Hty, sigma):
+            Hx = fwd_op(x)
             grad, cost = self.grad_cost(x, sigma)
-            grad = 1. / (data_lip + self.lamb.exp()) * \
-                (bp_op(fwd_op(x)) - bp_op(y) + grad)
-            cost = cost + (1/2)*(fwd_op(x) - y).norm(dim=(1, 2, 3), p=2)**2
+            grad = bp_op(Hx) - Hty + grad
+            cost = cost + (1/2)*(Hx - y).norm(dim=(1, 2, 3), p=2)**2
             return grad, cost
         model.reconstruct = types.MethodType(reconstruct, model)
 
         model.lamb.data = model.lamb + math.log(lamb)
+        lip = data_lip + model.lamb.exp()
         if testing:
             starter.record()
-        pred = AGDR(fbp_op(y), y, model, sigma * torch.ones(1,
+        pred = HBR(fbp_op(y), y, Hty, lip, model, sigma * torch.ones(1,
                     1, 1, 1, device=device), max_iter, tol)[0]
         if testing:
             ender.record()
@@ -71,7 +73,7 @@ device = parser.parse_args().device
 psnr = PSNR(data_range=1.).to(device)
 
 img_size, space_range = 362, 1
-num_angles, det_shape = 60, 256
+num_angles, det_shape = 20, 256
 fwd_op, fbp_op, bp_op = get_operators(img_size=img_size, space_range=space_range, num_angles=num_angles,
                                       det_shape=det_shape, device=device, fix_scaling=True)
 

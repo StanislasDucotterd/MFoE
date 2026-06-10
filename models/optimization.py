@@ -1,56 +1,60 @@
 import torch
 
 
-def AGDR(x_init, y, model, sigma, max_iter=300, tol=1e-4):
-    """Optimization using the FISTA accelerated rule"""
+def HBR(x_init, y, Hty, lip, model, sigma, max_iter=300, tol=1e-4):
 
     # initial value: noisy image
     x = torch.clone(x_init)
-    z = x.clone()
-    t = torch.ones(x.shape[0], device=x.device).view(-1, 1, 1, 1)
+    x_old = torch.clone(x_init)
 
     # cache values of scaling coeff for efficiency
     scaling = model.get_scaling(sigma=sigma)
 
     # the index of the images that have not converged yet
     idx = torch.arange(0, x.shape[0], device=x.device)
-    # relative change in the estimate
     res = torch.ones(x.shape[0], device=x.device, dtype=x.dtype)
-    old_cost = 1e12*torch.ones(x.shape[0], device=x.device, dtype=x.dtype)
+
+    grad, cost = model.reconstruct(x, y, sigma=sigma)
+
+    alpha = 1.99 / lip
+    beta = 0.5 * torch.ones(x.shape[0], 1, 1, 1, device=x.device, dtype=x.dtype)
 
     # mean number of iterations over the batch
     i_mean = 0
     for i in range(max_iter):
         model.scaling = scaling[idx]
-        x_old = torch.clone(x)
-        grad, cost = model.reconstruct(z[idx], y[idx], sigma=sigma[idx])
-        x[idx] = z[idx] - grad
+        z = x[idx] - alpha * grad[idx] + beta[idx] * (x[idx] - x_old[idx])
+        beta = 0.5 * (beta + 1.)
+        new_grad, new_cost = model.reconstruct(z, y[idx], Hty[idx], sigma=sigma[idx])
+        decrease = alpha * (1 - lip * alpha / 2) * grad[idx].pow(2).sum(dim=(1, 2, 3))
+        restart = (new_cost > cost[idx] - decrease)
 
-        t_old = torch.clone(t)
-        t = 0.5 * (1 + torch.sqrt(1 + 4*t**2))
-        z[idx] = x[idx] + (t_old[idx] - 1)/t[idx] * (x[idx] - x_old[idx])
+        x_old = x.clone()
+
+        x[idx[~restart]] = z[~restart]
+        grad[idx[~restart]] = new_grad[~restart]
+        cost[idx[~restart]] = new_cost[~restart]
+
+        if restart.any():
+            model.scaling = scaling[idx[restart]]
+            beta[idx[restart]] = 0.5
+            x[idx[restart]] = x[idx[restart]] - alpha * grad[idx[restart]]
+            grad[idx[restart]], cost[idx[restart]] = model.reconstruct(x[idx[restart]], y[idx[restart]], sigma=sigma[idx[restart]])
 
         if i > 0:
-            res[idx] = torch.norm(
-                x[idx] - x_old[idx], p=2, dim=(1, 2, 3)) / (torch.norm(x[idx], p=2, dim=(1, 2, 3)))
+            num = torch.linalg.vector_norm(x[idx] - x_old[idx], dim=(1, 2, 3))
+            den = torch.linalg.vector_norm(x[idx], dim=(1, 2, 3))
+            res = num / (den + 1e-8)
 
-        esti = cost - old_cost[idx]
-        old_cost[idx] = cost
-        id_restart = (esti > 0).nonzero().view(-1)
-        t[idx[id_restart]] = 1
-        z[idx[id_restart]] = x[idx[id_restart]]
-
-        condition = (res > tol)
-        idx = condition.nonzero().view(-1)
-        i_mean += torch.sum(condition).item() / x.shape[0]
-
-        if torch.max(res) < tol:
+        idx = idx[res > tol]
+        i_mean += torch.sum(res > tol).item() / x.shape[0]
+        
+        if len(idx) == 0:
             break
 
     model.clear_cache()
 
     return x, i+1, i_mean+1
-
 
 def proj_l1_channel(x):
     """

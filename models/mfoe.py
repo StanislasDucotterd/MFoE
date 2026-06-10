@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.optimization import AGDR, proj_l1_channel
+from models.optimization import HBR, proj_l1_channel
 from models.multi_conv import MultiConv2d
 import torch.nn.functional as F
 if torch.is_grad_enabled():
@@ -56,14 +56,15 @@ class MFoE(nn.Module):
 
         # update spectral norm of the convolutional layer
         self.conv_layer.spectral_norm()
+        lip = 1. + self.lamb.exp()
 
         # fixed point iteration
         def f(x):
-            return x - self.reconstruct(x, x_noisy, sigma=sigma)[0]
+            return x - self.reconstruct(x, x_noisy, sigma=sigma)[0] / lip
 
         def f_solver(deq_func, x0, max_iter, tol, stop_mode, **solver_kwargs):
-            z, self.fw_niter_max, self.fw_niter_mean = AGDR(
-                x0.view(x_noisy.shape), x0.view(x_noisy.shape), self, sigma, **self.param_fw)
+            z, self.fw_niter_max, self.fw_niter_mean = HBR(
+                x0.view(x_noisy.shape), x0.view(x_noisy.shape), lip, self, sigma, **self.param_fw)
             return z.view(x0.shape), [], []
 
         deq = get_deq(f_max_iter=self.param_fw['max_iter'], f_tol=self.param_fw['tol'], b_solver='broyden',
@@ -93,9 +94,9 @@ class MFoE(nn.Module):
         "Apply the matrix Q"
         if self.groupsize > 1:
             if self.Q is None:
-                self.Q = self.Q_param / \
+                self.Q = 0.999 * self.Q_param / \
                     torch.max(torch.sum(self.Q_param.abs(), dim=2,
-                              keepdim=True), torch.tensor(1.0))
+                              keepdim=True), torch.tensor(1.0 / 0.999))
                 self.Q_norms = torch.linalg.matrix_norm(
                     self.Q, ord=2, dim=(1, 2), keepdim=True)
             Q = self.Q / self.Q_norms**2
@@ -119,6 +120,13 @@ class MFoE(nn.Module):
             (1/2)*grad.norm(dim=1, p=2)**2
         cost = cost.unsqueeze(1)
         return grad, cost
+    
+    def moreau_grad(self, x):
+        if self.groupsize > 1:
+            grad = proj_l1_channel(x)
+        else:
+            grad = torch.clip(x, -1., 1.)
+        return grad
 
     def activation(self, x):
         grad_convex, cost_convex = self.moreau(x)
@@ -134,6 +142,17 @@ class MFoE(nn.Module):
         grad = self.lamb.exp() * (grad_convex - grad_concave)
         cost = self.lamb.exp() * (cost_convex - cost_concave)
         return grad, cost
+    
+    def activation_grad(self, x):
+        grad_convex = self.moreau_grad(x)
+        if self.convex:
+            grad_concave = 0.
+        else:
+            taus = F.relu(self.taus).exp()
+            grad_concave = self.moreau_grad(self.orient(x) / taus)
+            grad_concave = self.unorient(grad_concave)
+        grad = self.lamb.exp() * (grad_convex - grad_concave)
+        return grad
 
     def grad_cost(self, x, sigma):
         # Applying W
@@ -150,9 +169,22 @@ class MFoE(nn.Module):
         cost = cost * scaling**2
         cost = cost.sum(dim=(1, 2, 3, 4))
         return grad, cost
+    
+    def grad(self, x, sigma):
+        Wx = self.conv_layer(x)
+
+        # Applying nonlinearity
+        Wx = Wx.view(-1, self.groupsize, self.nb_groups, *x.shape[2:])
+        scaling = self.get_scaling(sigma)
+        Wx = Wx / scaling
+        grad = self.activation_grad(Wx)
+        grad = grad * scaling
+        grad = grad.view(-1, self.nb_filters, *x.shape[2:])
+        grad = self.conv_layer.transpose(grad)
+        return grad
 
     def reconstruct(self, x, x_noisy, sigma):
         grad, cost = self.grad_cost(x, sigma)
-        grad = 1. / (1. + self.lamb.exp()) * (x - x_noisy + grad)
+        grad = x - x_noisy + grad
         cost = cost + (1/2)*(x - x_noisy).norm(dim=(1, 2, 3), p=2)**2
         return grad, cost

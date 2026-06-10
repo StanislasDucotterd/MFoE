@@ -1,5 +1,5 @@
 # Multivariate Fields of Experts
-[TCI Link](https://ieeexplore.ieee.org/document/11487951/authors#authors) &emsp; [Arxiv Link](https://arxiv.org/abs/2508.06490)
+Links to the paper: [TCI Link](https://ieeexplore.ieee.org/document/11487951/authors#authors) &emsp; [Arxiv Link](https://arxiv.org/abs/2508.06490)
 
 ![alt text](https://github.com/StanislasDucotterd/MFoE/blob/main/potential.png?raw=true)
 

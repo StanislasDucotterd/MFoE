@@ -1,5 +1,5 @@
 # Multivariate Fields of Experts
-Implementation of experiments done in : https://arxiv.org/abs/2508.06490v1
+[TCI Link](https://ieeexplore.ieee.org/document/11487951/authors#authors)   [Arxiv Link](https://arxiv.org/abs/2508.06490)
 
 ![alt text](https://github.com/StanislasDucotterd/MFoE/blob/main/potential.png?raw=true)
 

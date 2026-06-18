@@ -1,4 +1,4 @@
-# Multivariate Fields of Experts
+# Multivariate Fields of Experts for Convergent Image Reconstruction
 Links to the paper: [TCI Link](https://ieeexplore.ieee.org/document/11487951/authors#authors) &emsp; [Arxiv Link](https://arxiv.org/abs/2508.06490)
 
 The notebook [`tutorial.ipynb`](tutorial.ipynb) provides a short, self-contained example of solving an inverse problem (image inpainting) with a trained MFoE.

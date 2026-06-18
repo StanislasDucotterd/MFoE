@@ -52,26 +52,46 @@ class MFoE(nn.Module):
         self.Q = None
         self.Q_norms = None
 
-    def forward(self, x_noisy, sigma):
+    def forward(self, y, sigma, H=lambda x: x, Ht=lambda x: x, data_lip=1.0, x_init=None):
+        """Solve the variational problem  (1/2)||H x - y||^2 + R(x)  for any
+        inverse problem.
+
+        Args:
+            y: the measurements (the noisy image for denoising, where H = I).
+            sigma: noise level, shape (batch, 1, 1, 1).
+            H: the forward operator  x -> H x   (identity for denoising).
+            Ht: its adjoint  x -> H^T x         (identity for denoising).
+            data_lip: Lipschitz constant of H^T H (1.0 for denoising).
+            x_init: initialisation of the solver (defaults to Hty).
+        """
 
         # update spectral norm of the convolutional layer
         self.conv_layer.spectral_norm()
-        lip = 1. + self.lamb.exp()
+        lip = data_lip + self.lamb.exp()
+        Hty = Ht(y)
+        if x_init is None:
+            x_init = Hty
 
-        # fixed point iteration
+        # at inference we only need the fixed point, no implicit differentiation
+        if not torch.is_grad_enabled():
+            z, self.fw_niter_max, self.fw_niter_mean = HBR(
+                x_init, y, Hty, lip, self, sigma, H, Ht, **self.param_fw)
+            return z
+
+        # training: solve and differentiate through the fixed point with DEQ
         def f(x):
-            return x - self.reconstruct(x, x_noisy, sigma=sigma)[0] / lip
+            return x - self.reconstruct(x, y, Hty, sigma, H, Ht)[0] / lip
 
         def f_solver(deq_func, x0, max_iter, tol, stop_mode, **solver_kwargs):
             z, self.fw_niter_max, self.fw_niter_mean = HBR(
-                x0.view(x_noisy.shape), x0.view(x_noisy.shape), lip, self, sigma, **self.param_fw)
+                x0.view(Hty.shape), y, Hty, lip, self, sigma, H, Ht, **self.param_fw)
             return z.view(x0.shape), [], []
 
         deq = get_deq(f_max_iter=self.param_fw['max_iter'], f_tol=self.param_fw['tol'], b_solver='broyden',
                       b_max_iter=self.param_bw['max_iter'], b_tol=self.param_bw['tol'], ift=True, kwargs={'ls': True})
 
         deq.f_solver = f_solver
-        z = deq(f, x_noisy)[0][-1]
+        z = deq(f, x_init)[0][-1]
 
         return z
 
@@ -183,8 +203,15 @@ class MFoE(nn.Module):
         grad = self.conv_layer.transpose(grad)
         return grad
 
-    def reconstruct(self, x, x_noisy, sigma):
+    def reconstruct(self, x, y, Hty, sigma, H=lambda x: x, Ht=lambda x: x):
+        """Gradient and cost of the variational objective
+            (1/2)||H x - y||^2 + R(x)
+        for any inverse problem. `Hty` is the precomputed H^T y (so that the
+        adjoint is not reapplied to y at every iteration). H, Ht and Hty all
+        reduce to the identity / noisy image for denoising.
+        """
         grad, cost = self.grad_cost(x, sigma)
-        grad = x - x_noisy + grad
-        cost = cost + (1/2)*(x - x_noisy).norm(dim=(1, 2, 3), p=2)**2
+        Hx = H(x)
+        grad = Ht(Hx) - Hty + grad
+        cost = cost + (1/2)*(Hx - y).norm(dim=(1, 2, 3), p=2)**2
         return grad, cost

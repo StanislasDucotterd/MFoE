@@ -1,7 +1,7 @@
 import torch
 
 
-def HBR(x_init, y, Hty, lip, model, sigma, max_iter=300, tol=1e-4):
+def HBR(x_init, y, Hty, lip, model, sigma, H=lambda x: x, Ht=lambda x: x, max_iter=300, tol=1e-4):
 
     # initial value: noisy image
     x = torch.clone(x_init)
@@ -14,7 +14,7 @@ def HBR(x_init, y, Hty, lip, model, sigma, max_iter=300, tol=1e-4):
     idx = torch.arange(0, x.shape[0], device=x.device)
     res = torch.ones(x.shape[0], device=x.device, dtype=x.dtype)
 
-    grad, cost = model.reconstruct(x, y, sigma=sigma)
+    grad, cost = model.reconstruct(x, y, Hty, sigma, H, Ht)
 
     alpha = 1.99 / lip
     beta = 0.5 * torch.ones(x.shape[0], 1, 1, 1, device=x.device, dtype=x.dtype)
@@ -25,7 +25,7 @@ def HBR(x_init, y, Hty, lip, model, sigma, max_iter=300, tol=1e-4):
         model.scaling = scaling[idx]
         z = x[idx] - alpha * grad[idx] + beta[idx] * (x[idx] - x_old[idx])
         beta = 0.5 * (beta + 1.)
-        new_grad, new_cost = model.reconstruct(z, y[idx], Hty[idx], sigma=sigma[idx])
+        new_grad, new_cost = model.reconstruct(z, y[idx], Hty[idx], sigma[idx], H, Ht)
         decrease = alpha * (1 - lip * alpha / 2) * grad[idx].pow(2).sum(dim=(1, 2, 3))
         restart = (new_cost > cost[idx] - decrease)
 
@@ -39,7 +39,8 @@ def HBR(x_init, y, Hty, lip, model, sigma, max_iter=300, tol=1e-4):
             model.scaling = scaling[idx[restart]]
             beta[idx[restart]] = 0.5
             x[idx[restart]] = x[idx[restart]] - alpha * grad[idx[restart]]
-            grad[idx[restart]], cost[idx[restart]] = model.reconstruct(x[idx[restart]], y[idx[restart]], sigma=sigma[idx[restart]])
+            grad[idx[restart]], cost[idx[restart]] = model.reconstruct(
+                x[idx[restart]], y[idx[restart]], Hty[idx[restart]], sigma[idx[restart]], H, Ht)
 
         if i > 0:
             num = torch.linalg.vector_norm(x[idx] - x_old[idx], dim=(1, 2, 3))

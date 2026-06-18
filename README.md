@@ -1,6 +1,8 @@
 # Multivariate Fields of Experts
 Links to the paper: [TCI Link](https://ieeexplore.ieee.org/document/11487951/authors#authors) &emsp; [Arxiv Link](https://arxiv.org/abs/2508.06490)
 
+The notebook [`tutorial.ipynb`](tutorial.ipynb) provides a short, self-contained example of solving an inverse problem (image inpainting) with a trained MFoE.
+
 ![alt text](https://github.com/StanislasDucotterd/MFoE/blob/main/potential.png?raw=true)
 
 #### Description
@@ -10,6 +12,7 @@ We introduce the multivariate fields of experts, a new framework for the learnin
 The required packages:
 - `pytorch`
 - `torchdeq`
+- `torchmetrics`
 - `matplotlib`
 - `fastmri` (to generate the MRI masks)
 - `astra-toolbox` (for CT reconstruction)

@@ -1,7 +1,6 @@
 import os
 import sys
 import math
-import types
 import torch
 import argparse
 from ct_forward_utils import get_operators
@@ -11,7 +10,6 @@ torch.manual_seed(0)
 
 sys.path.append('../..')
 from models.mfoe import MFoE
-from models.optimization import HBR
 from inverse_problems.tune_hyperparameters import tune_hyperparameters
 
 
@@ -26,7 +24,6 @@ def test_hyperparameter(lamb, sigma):
                           'image.pth'), weights_only=True).to(device)
         y = torch.load(os.path.join(
             data_folder, image, f'y_{num_angles}_{det_shape}.pth'), weights_only=True).to(device)
-        Hty = bp_op(y)
 
         # Power iterations to compute the lipschitz constant
         if n == 0:
@@ -38,20 +35,11 @@ def test_hyperparameter(lamb, sigma):
             x = bp_op(fwd_op(x))
             data_lip = x.norm()
 
-        def reconstruct(self, x, y, Hty, sigma):
-            Hx = fwd_op(x)
-            grad, cost = self.grad_cost(x, sigma)
-            grad = bp_op(Hx) - Hty + grad
-            cost = cost + (1/2)*(Hx - y).norm(dim=(1, 2, 3), p=2)**2
-            return grad, cost
-        model.reconstruct = types.MethodType(reconstruct, model)
-
         model.lamb.data = model.lamb + math.log(lamb)
-        lip = data_lip + model.lamb.exp()
         if testing:
             starter.record()
-        pred = HBR(fbp_op(y), y, Hty, lip, model, sigma * torch.ones(1,
-                    1, 1, 1, device=device), max_iter, tol)[0]
+        pred = model(y, sigma * torch.ones(1, 1, 1, 1, device=device),
+                     fwd_op, bp_op, data_lip=data_lip, x_init=fbp_op(y))
         if testing:
             ender.record()
             torch.cuda.synchronize()
@@ -92,8 +80,8 @@ model.eval()
 print(" **** Updating the Lipschitz constant **** ")
 model.conv_layer.spectral_norm(mode="power_method", n_steps=500)
 
-tol = 1e-5
-max_iter = 1000
+# solver settings used at inference (forward() reads them from model.param_fw)
+model.param_fw = {'max_iter': 1000, 'tol': 1e-5}
 best_lambda = 10.0
 best_sigma = 0.01
 

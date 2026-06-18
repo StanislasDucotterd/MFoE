@@ -1,7 +1,6 @@
 import os
 import sys
 import math
-import types
 import torch
 import argparse
 from torchmetrics.image import PeakSignalNoiseRatio as PSNR
@@ -10,7 +9,6 @@ torch.manual_seed(0)
 
 sys.path.append('../..')
 from models.mfoe import MFoE
-from models.optimization import HBR
 from inverse_problems.tune_hyperparameters import tune_hyperparameters
 
 
@@ -25,22 +23,11 @@ def test_hyperparameter(lamb, sigma):
                           'img.pth'), weights_only=True).to(device)
         y = torch.load(os.path.join(
             data_folder, image, f'y{kernel_id}_{noise_type}_noise.pth'), weights_only=True).to(device)
-        Hty = Ht(y)
-
-        def reconstruct(self, x, y, Hty, sigma):
-            Hx = H(x)
-            grad, cost = self.grad_cost(x, sigma)
-            grad = Ht(Hx) - Hty + grad
-            cost = cost + (1/2)*(Hx - y).norm(dim=(1, 2, 3), p=2)**2
-            return grad, cost
-        model.reconstruct = types.MethodType(reconstruct, model)
-
         model.lamb.data = model.lamb + math.log(lamb)
-        lip = 1. + model.lamb.exp()
         if testing:
             starter.record()
-        pred = HBR(y, y, Hty, lip, model, sigma * torch.ones(1, 1,
-                    1, 1, device=device), max_iter, tol)[0]
+        pred = model(y, sigma * torch.ones(1, 1, 1, 1, device=device),
+                     H, Ht, data_lip=1., x_init=y)
         if testing:
             ender.record()
             torch.cuda.synchronize()
@@ -89,8 +76,8 @@ model.eval()
 print(" **** Updating the Lipschitz constant **** ")
 model.conv_layer.spectral_norm(mode="power_method", n_steps=500)
 
-tol = 1e-5
-max_iter = 1000
+# solver settings used at inference (forward() reads them from model.param_fw)
+model.param_fw = {'max_iter': 1000, 'tol': 1e-5}
 best_lambda = 0.1
 best_sigma = 0.1
 
